@@ -36,20 +36,6 @@ def plot_momentum_bounds(cur_date, momentum_data, tsl):
     plt.close()
 
 
-"""
-def clean_up_df(df):
-    index = 0
-    prev_time = df.loc[index, 'datetime'] - timedelta(minutes=1)
-
-    while index < len(df):
-        cur_time = df.loc[index, 'datetime']
-        if cur_time.time() != time(9, 30, 0) and cur_time != (prev_time + timedelta(minutes=1)):
-            print(str(index) + ': ' + str(df.loc[index, 'datetime']))
-        prev_time = cur_time
-        index += 1
-"""
-
-
 def get_moves_from_open(df):
     move_df = pd.DataFrame(columns=['datetime', 'date', 'value'])
     cur_open_value = 0
