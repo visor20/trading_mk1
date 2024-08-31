@@ -8,6 +8,16 @@ import settings
 # for module specific packages
 from settings import np, pd, yf, mcal, datetime, date, timedelta, os
 
+def get_plot_dir_path():
+    src_dir = os.path.dirname(os.path.abspath(__file__))
+    output_dir = os.path.join(src_dir, settings.OUTPUT_DIR)
+    plot_dir = os.path.join(output_dir, settings.PLOT_DIR)
+
+    if not os.path.exists(plot_dir):
+        os.makedirs(plot_dir)
+
+    return plot_dir
+
 
 def get_file_path():
     src_dir = os.path.dirname(os.path.abspath(__file__))
@@ -18,6 +28,12 @@ def get_file_path():
 
     file_name = settings.SYM + '.csv'
     return os.path.join(output_dir, file_name)
+
+
+# function for use in main.py module
+def get_file_as_df():
+    file_path = get_file_path()
+    return pd.read_csv(file_path, index_col=0)
 
 
 def is_market_open(date, start_date, end_date):
@@ -78,6 +94,7 @@ def update_backtest_data(
         print("result: time_since_update out of valid range.")
 
     return final_df
+
 
 def data_manager():
     data = pd.DataFrame()
