@@ -14,8 +14,6 @@ import os
 # constants
 MARKET = 'NYSE'
 SYM = 'SPY'
-VOL_SYM = '^VXST'
-VOL_TOGGLE = False
 NUM_DAYS = 14
 OUTPUT_DIR = '..\\data'
 PLOT_DIR = '.\\plots'
@@ -25,3 +23,5 @@ UPDATE_LOWER_BOUND = timedelta(0)
 UPDATE_UPPER_BOUND = timedelta(days=7)
 MIN_IN_TRADING_DAY = 390
 PLOT_TOGGLE = False
+VOL_TOGGLE = False
+TRADING_RESULTS_TOGGLE = True

@@ -16,8 +16,35 @@ def get_datetime(date):
 
 def clean_up(market_df):
     market_df.reset_index(inplace=True)
+   
+    # drop duplicates and update the index for the coming operations
     market_df.drop_duplicates(subset=['index', 'Open', 'High', 'Low', 'Close'], keep='first', inplace=True)
+    market_df.reset_index(inplace=True)
+
+    datetime_list = []
+    for index, row in market_df.iterrows():
+        datetime_list.append(get_datetime(row['index']))
+    
+    market_df.insert(1, 'datetime', datetime_list)
+  
+    index = 0 
+    missing_datetimes = []
+    while index < (len(market_df) - 1):
+        cur_datetime = market_df.loc[index, 'datetime']
+        next_datetime = market_df.loc[index + 1, 'datetime']
+
+        if (cur_datetime.time() != time(15, 59, 0) 
+            and next_datetime != cur_datetime + timedelta(minutes=1)):
+            # it is rarely more than one minute missing... but just in case
+            temp_datetime = cur_datetime + timedelta(minutes=1)
+            while temp_datetime < next_datetime:
+                missing_datetimes.append(temp_datetime)
+                temp_datetime += timedelta(minutes=1)
+        index += 1
+
+    # set original datetime string back to the index
     market_df.set_index(keys='index', inplace=True)
+    return missing_datetimes
     
 
 def remove_corrupted_day(df, day_of_month):
@@ -58,8 +85,7 @@ def get_moves_from_open(df):
 
     # put market data in terms of the moves from open
     for date, row in df.iterrows():
-        cur_datetime = get_datetime(date)
-
+        cur_datetime = row['datetime']
         if cur_datetime.time() == time(9, 30, 0):
             cur_open_value = row['Open']
             temp_row = pd.DataFrame({'datetime': [cur_datetime], 'date': [cur_datetime.date()], 'value': [0]})
@@ -69,7 +95,6 @@ def get_moves_from_open(df):
         
         # add to main df
         move_df = pd.concat([move_df, temp_row], ignore_index=True)
-
     return move_df
 
 
@@ -86,6 +111,11 @@ def get_intersections(a_list, b_list):
         elif already_crossed:
             already_crossed = False
     return x, y
+
+
+# VWAP = SUM_0-t_(average of High, Low, and Close * Volume at minute t) / SUM_0-t_(Volume)
+#def get_vwap(cur_minute, momentum_data):
+#    for time, 
 
 
 def get_momentum_bounds(cur_date, date_list, time_series_data, moves_from_open):
@@ -137,7 +167,9 @@ def get_momentum_bounds(cur_date, date_list, time_series_data, moves_from_open):
         main_index = time_series_data.index.get_loc(str(cur_date) + ' 09:30:00-04:00')
 
         # is 'Open' Valid (Consider this in future)
-        tsl = time_series_data['Open'][main_index:main_index + settings.MIN_IN_TRADING_DAY].tolist()
+        # sliced_time_series_data = time_series_data.iloc[main_index : main_index + settings.MIN_IN_TRADING_DAY]
+        # print(sliced_time_series_data)
+        tsl = time_series_data['Open'][main_index : main_index + settings.MIN_IN_TRADING_DAY].tolist()
        
         # assign market to dataframe as well
         momentum_data['market'] = tsl
@@ -200,8 +232,8 @@ def get_trade_results_row(cur_date, momentum_df, trading_results):
 def main():
     market_df = get_file_as_df()
 
-    # clean up - remove duplicates but ignore the vol. column
-    clean_up(market_df)
+    # clean up - duplicates removed inplace and missing times returned...
+    missing_times = clean_up(market_df)
 
     move_df = get_moves_from_open(market_df)
     unique_dates = move_df['date'].unique()
@@ -214,8 +246,9 @@ def main():
         cur_date_momentum = get_momentum_bounds(cur_date, unique_dates, market_df, move_df)
         get_trade_results_row(cur_date, cur_date_momentum, trading_results)
 
-    print(trading_results)
-    print(trading_results['result'].sum())
+    if settings.TRADING_RESULTS_TOGGLE:
+        print(trading_results)
+        print(trading_results['result'].sum())
 
 
 if __name__ == "__main__":
