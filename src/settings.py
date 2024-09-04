@@ -11,10 +11,19 @@ from datetime import datetime, date, time, timedelta
 import os
 
 
-# constants
+# market constants
 MARKET = 'NYSE'
 SYM = 'SPY'
+
+# number of days the average move from open bounds are based on
 NUM_DAYS = 14
+# times at which trades are allowed to be placed (10 -> 9:40, 9:50, etc).
+MIN_STEP = 30
+# widens the bounds... 
+VM = 1.0
+# will be incorporated into vol. calculations
+MAX_NUM_SHARES = 1
+
 OUTPUT_DIR = '..\\data'
 PLOT_DIR = '.\\plots'
 GRANULARITY = '1m'

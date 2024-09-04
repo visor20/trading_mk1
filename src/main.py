@@ -55,19 +55,18 @@ def remove_corrupted_day(df, day_of_month):
     df.drop(dates_to_drop, inplace=True)
 
 
-def plot_momentum_bounds(cur_date, momentum_data):
-    # get intersecting points 
-    upper_x, upper_y = get_intersections(momentum_data['market'], momentum_data['upper_bound'])
-    lower_x, lower_y = get_intersections(momentum_data['lower_bound'], momentum_data['market'])
-
+def plot_momentum_bounds(cur_date, momentum_data, enter_loc, exit_loc):
     plt.figure(figsize=(12, 8))
     plt.plot(momentum_data['lower_bound'], label='lower bound')
     plt.plot(momentum_data['upper_bound'], label='upper bound')
     plt.plot(momentum_data['market'], label='market data')
+    plt.plot(momentum_data['vwap'], label='vwap')
 
-    # points
-    plt.scatter(upper_x, upper_y)
-    plt.scatter(lower_x, lower_y)
+    # plot enter and exits only if they exist 
+    if enter_loc != 0:
+        plt.axvline(x=enter_loc, color='g', linestyle='--', linewidth=2, label='position entrance')
+    if exit_loc != 0:
+        plt.axvline(x=exit_loc, color='m', linestyle='--', linewidth=2, label='position exit')
 
     plt.title(str(cur_date))
     plt.xlabel('minutes from open')
@@ -98,36 +97,49 @@ def get_moves_from_open(df):
     return move_df
 
 
-def get_intersections(a_list, b_list):
-    x = []
-    y = []
-    already_crossed = False
-    for a in enumerate(a_list):
-        if a[1] > b_list[a[0]]:
-            if not already_crossed and a[0] != 0:
-                x.append(a[0])
-                y.append(a[1])
-                already_crossed = True
-        elif already_crossed:
-            already_crossed = False
-    return x, y
+def slice_time_series(index, market_df, missing_datetimes):
+    new_df = pd.DataFrame(columns=['datetime', 'valid', 'Open', 'High', 'Low', 'Close', 'Volume'])
+    start_datetime = market_df['datetime'].iat[index]
+    end_datetime = start_datetime + timedelta(minutes=settings.MIN_IN_TRADING_DAY)
+    
+    temp = start_datetime
+    row_index = 0
+    while temp < end_datetime:
+        if temp in missing_datetimes:
+            new_df.loc[row_index, 'datetime'] = temp
+            new_df.loc[row_index, 'valid'] = False
+        else:
+            new_df.loc[row_index, 'datetime'] = temp
+            new_df.loc[row_index, 'valid'] = True
+            new_df.loc[row_index, 'Open'] = market_df['Open'].iat[index]
+            new_df.loc[row_index, 'High'] = market_df['High'].iat[index]
+            new_df.loc[row_index, 'Low'] = market_df['Low'].iat[index]
+            new_df.loc[row_index, 'Close'] = market_df['Close'].iat[index]
+            new_df.loc[row_index, 'Volume'] = market_df['Volume'].iat[index]
+            index += 1
+        row_index += 1
+        temp += timedelta(minutes=1)
+
+    return new_df
 
 
 # VWAP = SUM_0-t_(average of High, Low, and Close * Volume at minute t) / SUM_0-t_(Volume)
-#def get_vwap(cur_minute, momentum_data):
-#    for time, 
+# this function calulates the numerator... 
+def get_hlc(row):
+    hlc_avg = (row['High'] + row['Low'] + row['Close']) / 3
+    return hlc_avg * row['Volume']
 
 
-def get_momentum_bounds(cur_date, date_list, time_series_data, moves_from_open):
-    momentum_data = pd.DataFrame(columns=['time', 'x', 'x_day_avg', 'lower_bound', 'upper_bound', 'market'])
+def get_momentum_bounds(cur_date, date_list, missing_datetimes, time_series_data, moves_from_open):
+    momentum_data = pd.DataFrame(
+        columns=['time', 'x', 'x_day_avg', 'lower_bound', 'upper_bound', 'market', 'valid', 'vwap'])
     
     # get the number of days since data collection began
     days_from_start = np.where(date_list == cur_date)[0].item()
 
-    # if we have at least 14 days of data + current day, we can perform momentum calculations
     if days_from_start >= settings.NUM_DAYS:
         # get the days of interest for these calculations
-        updated_date_list = date_list[days_from_start-settings.NUM_DAYS:days_from_start-1]
+        updated_date_list = date_list[days_from_start-settings.NUM_DAYS : days_from_start]
 
         # make time column
         minutes = pd.date_range(start='09:30:00', end='15:59:00', freq=timedelta(minutes=1)).to_pydatetime()
@@ -139,11 +151,9 @@ def get_momentum_bounds(cur_date, date_list, time_series_data, moves_from_open):
         for d in updated_date_list:
             for index, row, in momentum_data.iterrows():
                 cur_datetime = datetime.combine(d, row['time'])
-                move_index = moves_from_open.index[moves_from_open['datetime'] == cur_datetime]
-                cur_move_series = moves_from_open.loc[move_index, 'value']
-
-                if cur_move_series.size != 0:
-                    pre_avg_vals[index] += cur_move_series.item()
+                if cur_datetime not in missing_datetimes:
+                    move_index = moves_from_open.index[moves_from_open['datetime'] == cur_datetime]
+                    pre_avg_vals[index] += moves_from_open.loc[move_index, 'value'].item()
                     x_vals[index] += 1
        
         avg_vals = pre_avg_vals / x_vals
@@ -157,76 +167,84 @@ def get_momentum_bounds(cur_date, date_list, time_series_data, moves_from_open):
         prev_close = time_series_data.loc[str(updated_date_list[-1]) + ' 15:59:00-04:00', 'Close']
         
         for index, row in momentum_data.iterrows():
-            lower_bound_list[index] = min(cur_open, prev_close) * (1 - row['x_day_avg'])
-            upper_bound_list[index] = max(cur_open, prev_close) * (1 + row['x_day_avg'])
+            lower_bound_list[index] = min(cur_open, prev_close) * (1 - settings.VM * row['x_day_avg'])
+            upper_bound_list[index] = max(cur_open, prev_close) * (1 + settings.VM * row['x_day_avg'])
 
         # assign to dataframe
         momentum_data['lower_bound'] = lower_bound_list
         momentum_data['upper_bound'] = upper_bound_list
 
         main_index = time_series_data.index.get_loc(str(cur_date) + ' 09:30:00-04:00')
+        sliced_time_series_data = slice_time_series(main_index, time_series_data, missing_datetimes)
 
-        # is 'Open' Valid (Consider this in future)
-        # sliced_time_series_data = time_series_data.iloc[main_index : main_index + settings.MIN_IN_TRADING_DAY]
-        # print(sliced_time_series_data)
-        tsl = time_series_data['Open'][main_index : main_index + settings.MIN_IN_TRADING_DAY].tolist()
-       
         # assign market to dataframe as well
-        momentum_data['market'] = tsl
+        momentum_data['market'] = sliced_time_series_data['Open'].to_list()
+        momentum_data['valid'] = sliced_time_series_data['valid'].to_list()
 
-        if settings.PLOT_TOGGLE:
-            plot_momentum_bounds(cur_date, momentum_data)
+        # vwap bounds to improve the results
+        hlc_sum = volume_sum = cur_vwap = prev_vwap = 0
+        for i, r in sliced_time_series_data.iterrows():
+            if r['valid']:
+                hlc_sum += get_hlc(r)
+                volume_sum += r['Volume']
+                cur_vwap = hlc_sum / volume_sum
+                momentum_data.loc[i, 'vwap'] = cur_vwap
+            else:
+                momentum_data.loc[i, 'vwap'] = prev_vwap
+            prev_vwap = cur_vwap
 
     return momentum_data
 
+def get_exit_val(time, trade_type, position, momentum_df):
+    for i, r in momentum_df.iterrows():
+        if r['time'] > time and r['valid']:
+            if ((trade_type == 'short' and r['market'] >= r['lower_bound'])
+                or (trade_type == 'long' and r['market'] <= r['upper_bound'])):
+                return i, r['market']
+    # return close only if market never reverts back to boundaries
+    return i, momentum_df['market'].iat[-1]
+                
 
 def get_trade_results_row(cur_date, momentum_df, trading_results):
-    # get current index 
     cur_index = trading_results.loc[trading_results['date'] == cur_date].index
     
-    # vol.
-    vix_coef = 1
-
-    if settings.VOL_TOGGLE:
-        vix_ticker = yf.Ticker(settings.VOL_SYM)
-        vix_df = vix_ticker.history(start=cur_date, end=cur_date + timedelta(days=1), period='1d')
-        vix_val = vix_df['Open'].iloc[0]
-        print(vix_val)
-    
-        if vix_val <= 10:
-            vix_coef *= 5
-        elif vix_val <= 20:
-            vix_coef *= 2
-
+    volatility_coef = settings.MAX_NUM_SHARES
+    #if settings.VOL_TOGGLE:
 
     # trade variables
-    position = 0
-    result = 0
+    position = result = enter_time = exit_time = 0
     trade_placed = False
     trade_type = 'NA'
     trade_time = 'NA'
 
     if not momentum_df.empty:
-        # loop through and determine trade
         for time, row in momentum_df.iterrows():
-            if row['market'] > row['upper_bound'] and not trade_placed:
-                position = row['market']
-                trade_time = str(row['time'])
-                trade_placed = True
-                trade_type = 'long'
-                result = momentum_df['market'].iat[-1] - position
-            elif row['market'] < row['lower_bound'] and not trade_placed:
-                position = row['market']
-                trade_time = str(row['time'])
-                trade_placed = True
-                trade_type = 'short'
-                result = position - momentum_df['market'].iat[-1]
+            if not trade_placed:
+                if row['market'] > row['upper_bound'] and time % settings.MIN_STEP == 0:
+                    position = row['market']
+                    trade_time = row['time']
+                    trade_placed = True
+                    trade_type = 'long'
+                    enter_time = time
+                elif row['market'] < row['lower_bound'] and time % settings.MIN_STEP == 0:
+                    position = row['market']
+                    trade_time = row['time']
+                    trade_placed = True
+                    trade_type = 'short'
+                    enter_time = time
+   
+        if trade_placed:
+            exit_time, exit_val = get_exit_val(trade_time, trade_type, position, momentum_df)
+            if trade_type == 'long':
+                result = exit_val - position
+            elif trade_type == 'short':
+                result = position - exit_val
 
-
-    trading_results.loc[cur_index, 'result'] = result * vix_coef
+    trading_results.loc[cur_index, 'result'] = result * volatility_coef
     trading_results.loc[cur_index, 'trade_performed'] = trade_placed
     trading_results.loc[cur_index, 'trade_type'] = trade_type
     trading_results.loc[cur_index, 'trade_time'] = trade_time
+    return enter_time, exit_time
 
 
 def main():
@@ -243,8 +261,11 @@ def main():
     trading_results['date'] = unique_dates
 
     for cur_date in unique_dates:
-        cur_date_momentum = get_momentum_bounds(cur_date, unique_dates, market_df, move_df)
-        get_trade_results_row(cur_date, cur_date_momentum, trading_results)
+        cur_date_momentum = get_momentum_bounds(cur_date, unique_dates, missing_times, market_df, move_df)
+        enter_loc, exit_loc = get_trade_results_row(cur_date, cur_date_momentum, trading_results)
+
+        if settings.PLOT_TOGGLE:
+            plot_momentum_bounds(cur_date, cur_date_momentum, enter_loc, exit_loc)
 
     if settings.TRADING_RESULTS_TOGGLE:
         print(trading_results)
