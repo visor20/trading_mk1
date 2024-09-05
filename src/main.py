@@ -66,39 +66,43 @@ def plot_momentum_bounds(cur_date, momentum_data, enter_loc, exit_loc):
     plt.plot(momentum_data['vwap'], label='vwap')
 
     # plot enter and exits only if they exist 
-    if enter_loc != 0:
-        plt.axvline(x=enter_loc, color='g', linestyle='--', linewidth=2, label='position entrance')
-    if exit_loc != 0:
-        plt.axvline(x=exit_loc, color='m', linestyle='--', linewidth=2, label='position exit')
+    for enter_val in enter_loc:
+        plt.axvline(x=enter_val, color='g', linestyle='--', linewidth=1)
+    for exit_val in exit_loc:
+        plt.axvline(x=exit_val, color='m', linestyle='--', linewidth=1)
 
     plt.title(str(cur_date))
     plt.xlabel('minutes from open')
     plt.ylabel('price (USD)')
     plt.legend()
-    plt.grid(True)
+    plt.grid(visible=True, alpha=0.25)
     file_name = get_plot_dir_path() + '\\plot_' + str(cur_date) + '.png'
     plt.savefig(file_name)
     plt.close()
 
 
 def get_moves_from_open(df):
-    move_df = pd.DataFrame(columns=['datetime', 'valid', 'value'])
+    move_df = pd.DataFrame()
     cur_open_value = 0
 
-    # put market data in terms of the moves from open
-    for index, row in df.iterrows():
-        cur_datetime = row['datetime']
-        if row['valid']:
+    for i, r in df.iterrows():
+        cur_datetime = r['datetime']
+        if r['valid']:
             if cur_datetime.time() == time(9, 30, 0):
-                cur_open_value = row['Open']
+                cur_open_value = r['Open']
                 temp_row = pd.DataFrame({'datetime': [cur_datetime], 'valid': [True], 'value': [0]})
             else:
-                temp_val = abs(row['Close'] / cur_open_value - 1)
+                temp_val = abs(r['Close'] / cur_open_value - 1)
                 temp_row = pd.DataFrame({'datetime': [cur_datetime], 'valid': [True], 'value': [temp_val]})
         else:
             temp_row = pd.DataFrame({'datetime': [cur_datetime], 'valid': [False], 'value': [0]})
+        
+        # ensures pd.concat is not used on an empty df (which is depreciated by pd)
+        if i == 0:
+            move_df = temp_row
+        else:
+            move_df = pd.concat([move_df, temp_row], ignore_index=True)
 
-        move_df = pd.concat([move_df, temp_row], ignore_index=True)
     return move_df
 
 
@@ -185,39 +189,56 @@ def get_trade_results_row(cur_date, momentum_df, trading_results):
     #if settings.VOL_TOGGLE:
 
     # trade variables
-    position = result = enter_time = exit_time = 0
-    trade_placed = False
-    trade_type = 'NA'
-    trade_time = 'NA'
+    position_list = []
+    result_list = []
+    trade_type_list = []
+    enter_index_list = []
+    exit_index_list = []
+    trade_active = False
 
     if not momentum_df.empty:
-        for time, row in momentum_df.iterrows():
-            if not trade_placed:
-                if row['market'] > row['upper_bound'] and time % settings.MIN_STEP == 0:
-                    position = row['market']
-                    trade_time = row['time']
-                    trade_placed = True
-                    trade_type = 'long'
-                    enter_time = time
-                elif row['market'] < row['lower_bound'] and time % settings.MIN_STEP == 0:
-                    position = row['market']
-                    trade_time = row['time']
-                    trade_placed = True
-                    trade_type = 'short'
-                    enter_time = time
-   
-        if trade_placed:
-            exit_time, exit_val = get_exit_val(trade_time, trade_type, position, momentum_df)
-            if trade_type == 'long':
-                result = exit_val - position
-            elif trade_type == 'short':
-                result = position - exit_val
+        for i, r in momentum_df.iterrows():
+            if (not trade_active 
+                and i % settings.MIN_STEP == 0
+                and r['valid']):
+                if r['market'] > r['upper_bound']:
+                    position_list.append(r['market'])
+                    trade_type_list.append('long')
+                    enter_index_list.append(i)
+                    trade_active = True
+                elif r['market'] < r['lower_bound']: 
+                    position_list.append(r['market'])
+                    trade_type_list.append('short')
+                    enter_index_list.append(i)
+                    trade_active = True
+            elif (trade_active 
+                  and trade_type_list[-1] == 'long'
+                  and r['valid']
+                  and r['market'] <= r['upper_bound']):
+                    result_list.append(r['market'] - position_list[-1])
+                    exit_index_list.append(i)
+                    trade_active = False
+            elif (trade_active
+                  and trade_type_list[-1] == 'short'
+                  and r['valid']
+                  and r['market'] >= r['lower_bound']):
+                    result_list.append(position_list[-1] - r['market'])
+                    exit_index_list.append(i)
+                    trade_active = False
 
-    trading_results.loc[cur_index, 'result'] = result * volatility_coef
-    trading_results.loc[cur_index, 'trade_performed'] = trade_placed
-    trading_results.loc[cur_index, 'trade_type'] = trade_type
-    trading_results.loc[cur_index, 'trade_time'] = trade_time
-    return enter_time, exit_time
+
+    # if exit is at close
+    if len(exit_index_list) == len(enter_index_list) - 1:
+        exit_index_list.append(i)
+        if trade_type_list[-1] == 'long':
+            result_list.append(momentum_df.loc[i, 'market'] - position_list[-1])
+        else:
+            result_list.append(position_list[-1] - momentum_df.loc[i, 'market'])
+
+    trading_results.loc[cur_index, 'results'] = sum(result_list) * volatility_coef
+    trading_results.loc[cur_index, 'num_trades'] = len(position_list)
+
+    return enter_index_list, exit_index_list
 
 
 def main():
@@ -230,7 +251,7 @@ def main():
     unique_dates = sorted(set(dt.date() for dt in move_df['datetime']))
 
     # get momentum data and the results for each day
-    trading_results = pd.DataFrame(columns=['date', 'trade_performed', 'trade_type', 'trade_time', 'result'])
+    trading_results = pd.DataFrame(columns=['date', 'num_trades', 'results'])
     trading_results['date'] = unique_dates
 
     for cur_date in unique_dates:
@@ -242,7 +263,7 @@ def main():
 
     if settings.TRADING_RESULTS_TOGGLE:
         print(trading_results)
-        print(trading_results['result'].sum())
+        print(trading_results['results'].sum())
 
 
 if __name__ == "__main__":
