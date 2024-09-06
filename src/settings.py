@@ -22,7 +22,7 @@ MIN_STEP = 30
 # widens the bounds... 
 VM = 1.0
 # will be incorporated into vol. calculations
-MAX_NUM_SHARES = 1
+MAX_NUM_SHARES = 4
 
 OUTPUT_DIR = '..\\data'
 PLOT_DIR = '.\\plots'
@@ -31,6 +31,7 @@ CREATE_BACKTEST_DATA_RANGE = timedelta(days=29)
 UPDATE_LOWER_BOUND = timedelta(0)
 UPDATE_UPPER_BOUND = timedelta(days=7)
 MIN_IN_TRADING_DAY = 390
+DAYS_IN_TRADING_YEAR = 252
 PLOT_TOGGLE = True
-VOL_TOGGLE = False
+VOL_TOGGLE = True
 TRADING_RESULTS_TOGGLE = True

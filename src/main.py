@@ -8,6 +8,7 @@ import settings
 # import module specific packages
 from settings import np, pd, plt, yf, datetime, date, time, timedelta 
 from data_manager import get_file_as_df, get_plot_dir_path
+from volatility import get_annualized_volatility, get_avg_return, get_unique_dates
 
 
 def get_datetime(date):
@@ -182,13 +183,19 @@ def get_exit_val(time, trade_type, position, momentum_df):
     return i, momentum_df['market'].iat[-1]
 
 
-def get_trade_results_row(cur_date, momentum_df, trading_results):
+def get_trade_results_row(cur_date, momentum_df, time_series_df, trading_results):
     cur_index = trading_results.loc[trading_results['date'] == cur_date].index
     
-    volatility_coef = settings.MAX_NUM_SHARES
-    #if settings.VOL_TOGGLE:
+    volatility_coef = 1
+    if settings.VOL_TOGGLE:
+        volatility = get_annualized_volatility(cur_date, time_series_df, settings.NUM_DAYS)
+        trading_results.loc[cur_index, 'volatility'] = volatility
 
-    # trade variables
+        if volatility <= 15.0:
+            volatility_coef = settings.MAX_NUM_SHARES
+        elif volatility <= 20.0:
+            volatility_coef = settings.MAX_NUM_SHARES / 2
+
     position_list = []
     result_list = []
     trade_type_list = []
@@ -212,6 +219,7 @@ def get_trade_results_row(cur_date, momentum_df, trading_results):
                     enter_index_list.append(i)
                     trade_active = True
             elif (trade_active 
+                  and i % settings.MIN_STEP == 0
                   and trade_type_list[-1] == 'long'
                   and r['valid']
                   and r['market'] <= r['upper_bound']):
@@ -219,6 +227,7 @@ def get_trade_results_row(cur_date, momentum_df, trading_results):
                     exit_index_list.append(i)
                     trade_active = False
             elif (trade_active
+                  and i % settings.MIN_STEP == 0
                   and trade_type_list[-1] == 'short'
                   and r['valid']
                   and r['market'] >= r['lower_bound']):
@@ -248,22 +257,26 @@ def main():
     clean_market_df = clean_up(market_df)
 
     move_df = get_moves_from_open(clean_market_df)
-    unique_dates = sorted(set(dt.date() for dt in move_df['datetime']))
+    unique_dates = get_unique_dates(move_df)
 
     # get momentum data and the results for each day
-    trading_results = pd.DataFrame(columns=['date', 'num_trades', 'results'])
+    trading_results = pd.DataFrame(columns=['date', 'volatility', 'num_trades', 'results'])
     trading_results['date'] = unique_dates
 
-    for cur_date in unique_dates:
-        cur_date_momentum = get_momentum_bounds(cur_date, unique_dates, clean_market_df, move_df)
-        enter_loc, exit_loc = get_trade_results_row(cur_date, cur_date_momentum, trading_results)
+    for index, cur_date in enumerate(unique_dates):
+        # + 1 days accounts for the volatility calculation
+        if index >= settings.NUM_DAYS + 1:
+            cur_date_momentum = get_momentum_bounds(cur_date, unique_dates, clean_market_df, move_df)
+            enter_loc, exit_loc = get_trade_results_row(cur_date, cur_date_momentum, clean_market_df, trading_results)
 
-        if settings.PLOT_TOGGLE:
-            plot_momentum_bounds(cur_date, cur_date_momentum, enter_loc, exit_loc)
+            if settings.PLOT_TOGGLE:
+                plot_momentum_bounds(cur_date, cur_date_momentum, enter_loc, exit_loc)
 
     if settings.TRADING_RESULTS_TOGGLE:
-        print(trading_results)
-        print(trading_results['results'].sum())
+        # again, the + 1 accounts for the extra day needed for volatility
+        sliced_trading_results = trading_results[settings.NUM_DAYS + 1:]
+        print(sliced_trading_results)
+        print(sliced_trading_results['results'].sum())
 
 
 if __name__ == "__main__":
