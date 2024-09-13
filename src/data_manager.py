@@ -8,14 +8,13 @@ import settings
 # for module specific packages
 from settings import np, pd, yf, mcal, datetime, date, timedelta, os
 
+
 def get_plot_dir_path():
     src_dir = os.path.dirname(os.path.abspath(__file__))
     output_dir = os.path.join(src_dir, settings.OUTPUT_DIR)
     plot_dir = os.path.join(output_dir, settings.PLOT_DIR)
-
     if not os.path.exists(plot_dir):
         os.makedirs(plot_dir)
-
     return plot_dir
 
 

@@ -49,5 +49,3 @@ def get_volatility(cur_day, df, num_days):
 # wrapper for get_volatility...
 def get_annualized_volatility(cur_day, df, num_days):
     return get_volatility(cur_day, df, num_days) * np.sqrt(settings.DAYS_IN_TRADING_YEAR) * 100
-
-
