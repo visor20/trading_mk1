@@ -197,9 +197,7 @@ def get_trade_results_row(cur_date, momentum_df, time_series_df, trading_results
         elif volatility <= 20.0:
             volatility_coef = settings.MAX_NUM_SHARES / 2
 
-    position_list, result_list, type_list, enter_index_list, exit_index_list = [], [], [], [], []
     trades = CurTrades(is_active=False)
-
     if not momentum_df.empty:
         for i, r in momentum_df.iterrows():
             if r['valid']:
