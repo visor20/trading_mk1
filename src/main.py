@@ -94,7 +94,7 @@ def get_moves_from_open(df):
                 temp_row = pd.DataFrame({'datetime': [cur_datetime], 'valid': [True], 'value': [temp_val]})
         else:
             temp_row = pd.DataFrame({'datetime': [cur_datetime], 'valid': [False], 'value': [0]})
-        
+
         # ensures pd.concat is not used on an empty df (which is depreciated by pd)
         if i == 0:
             move_df = temp_row
@@ -172,16 +172,6 @@ def get_momentum_bounds(cur_date, date_list, time_series_data, moves_from_open):
         # vwap can be used as another bound to improve exit timing...
         get_vwap(sliced_time_series_data, momentum_data)
     return momentum_data
-
-
-def get_exit_val(time, trade_type, position, momentum_df):
-    for i, r in momentum_df.iterrows():
-        if r['time'] > time and r['valid']:
-            if ((trade_type == 'short' and r['market'] >= r['lower_bound'])
-                or (trade_type == 'long' and r['market'] <= r['upper_bound'])):
-                return i, r['market']
-    # return close only if market never reverts back to boundaries
-    return i, momentum_df['market'].iat[-1]
 
 
 def get_trade_results_row(cur_date, momentum_df, time_series_df, trading_results):
