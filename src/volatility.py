@@ -5,8 +5,7 @@ import settings
 
 
 # import module specific packages
-from settings import np, pd, datetime, date, time, timedelta 
-
+from settings import np, pd, datetime, date, time, timedelta
 
 def get_unique_dates(df):
     return sorted(set(dt.date() for dt in df['datetime']))

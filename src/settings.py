@@ -19,8 +19,6 @@ SYM = 'SPY'
 NUM_DAYS = 14
 # times at which trades are allowed to be placed (10 -> 9:40, 9:50, etc).
 MIN_STEP = 30
-# widens the bounds... 
-VM = 1.0
 # will be incorporated into vol. calculations
 MAX_NUM_SHARES = 4
 

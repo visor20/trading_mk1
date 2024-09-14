@@ -160,8 +160,8 @@ def get_momentum_bounds(cur_date, date_list, time_series_data, moves_from_open):
         sliced_time_series_data.reset_index(inplace=True)
 
         for index, row in momentum_data.iterrows():
-            lower_bound_list[index] = min(cur_open, prev_close) * (1 - settings.VM * row['x_day_avg'])
-            upper_bound_list[index] = max(cur_open, prev_close) * (1 + settings.VM * row['x_day_avg'])
+            lower_bound_list[index] = min(cur_open, prev_close) * (1 - row['x_day_avg'])
+            upper_bound_list[index] = max(cur_open, prev_close) * (1 + row['x_day_avg'])
 
         # assign to dataframe
         momentum_data['lower_bound'] = lower_bound_list
@@ -220,7 +220,6 @@ def main():
 
     # duplicates removed and missing times marked as invalid
     clean_market_df = clean_up(market_df)
-
     move_df = get_moves_from_open(clean_market_df)
     unique_dates = get_unique_dates(move_df)
 
