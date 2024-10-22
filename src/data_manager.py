@@ -2,14 +2,15 @@
 
 
 # import settings for constant usage
+from pandas import DataFrame
 import settings
 
 
 # for module specific packages
-from settings import np, pd, yf, mcal, datetime, date, timedelta, os
+from settings import pd, yf, mcal, datetime, date, timedelta, os
 
 
-def get_plot_dir_path():
+def get_plot_dir_path() -> str:
     src_dir = os.path.dirname(os.path.abspath(__file__))
     output_dir = os.path.join(src_dir, settings.OUTPUT_DIR)
     plot_dir = os.path.join(output_dir, settings.PLOT_DIR)
@@ -18,7 +19,7 @@ def get_plot_dir_path():
     return plot_dir
 
 
-def get_file_path():
+def get_file_path() -> str:
     src_dir = os.path.dirname(os.path.abspath(__file__))
     output_dir = os.path.join(src_dir, settings.OUTPUT_DIR)
 
@@ -30,12 +31,12 @@ def get_file_path():
 
 
 # function for use in main.py module
-def get_file_as_df():
+def get_file_as_df() -> DataFrame:
     file_path = get_file_path()
     return pd.read_csv(file_path, index_col=0)
 
 
-def is_market_open(date, start_date, end_date):
+def is_market_open(date: datetime, start_date: datetime, end_date: datetime):
     nyse = mcal.get_calendar(settings.MARKET)
     open_days = nyse.valid_days(start_date, end_date)
     return date in open_days.date
@@ -46,7 +47,7 @@ def create_backtest_data(
     test_start=None,
     test_end=None,
     granularity=settings.GRANULARITY
-):
+) -> DataFrame:
     # establish start and end if undefined
     if test_end == None:
         test_end = date.today()
@@ -72,9 +73,9 @@ def create_backtest_data(
 
 
 def update_backtest_data(
-    symbol=None,
-    file_path=None,
-    granularity=settings.GRANULARITY
+        symbol: str,
+        file_path: str,
+        granularity: int=int(settings.GRANULARITY)
 ):
     ticker_obj = yf.Ticker(symbol)
     final_df = pd.read_csv(file_path, index_col=0)
@@ -95,7 +96,7 @@ def update_backtest_data(
     return final_df
 
 
-def data_manager():
+def data_manager() -> None:
     data = pd.DataFrame()
     
     file_path = get_file_path()
@@ -116,3 +117,5 @@ def data_manager():
 # executes functions to update the csv
 if __name__ == "__main__":
     data_manager()
+
+

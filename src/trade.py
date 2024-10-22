@@ -1,9 +1,9 @@
 # class for trading results 
 
-from settings import np, pd
+from settings import pd
 
 class CurTrades:
-    def __init__(self, is_active):
+    def __init__(self, is_active: bool) -> None:
         self.num_trades = 0
         self.is_active = is_active
         self.types = []
@@ -12,7 +12,7 @@ class CurTrades:
         self.exit_i_vals = []
         self.results = []
 
-    def add_trade(self, market_val, type_val, enter_i_val):
+    def add_trade(self, market_val: float, type_val: str, enter_i_val: int) -> None:
         self.is_active = True
         self.num_trades += 1
 
@@ -21,18 +21,18 @@ class CurTrades:
         self.enter_i_vals.append(enter_i_val)
     
     # only to be called after add trade
-    def is_long(self):
+    def is_long(self) -> bool:
         return self.types[-1] == 'long'
 
-    def get_cur_position(self):
+    def get_cur_position(self) -> float:
         return self.positions[-1]
 
-    def end_trade(self, result, exit_i_val):
+    def end_trade(self, result: float, exit_i_val: int):
         self.is_active = False
         self.exit_i_vals.append(exit_i_val)
         self.results.append(result)
 
-    def check_exit(self, df, i):
+    def check_exit(self, df: pd.DataFrame, i: int) -> None:
         if len(self.exit_i_vals) == self.num_trades - 1:
             self.exit_i_vals.append(i)
             if self.is_long():

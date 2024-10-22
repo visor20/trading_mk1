@@ -2,26 +2,27 @@
 
 
 # import settings for constant usage
+from pandas import DataFrame
 import settings
 
 
 # import module specific packages
-from settings import np, pd, plt, yf, datetime, date, time, timedelta 
+from settings import np, pd, plt, yf, datetime, time, timedelta 
 from data_manager import get_file_as_df, get_plot_dir_path
 from volatility import get_annualized_volatility, get_avg_return, get_unique_dates
 from trade import CurTrades
 
-def get_datetime(date):
+def get_datetime(date: str) -> datetime:
     return datetime.strptime(date[:len('xxxx-xx-xx xx:xx:xx')], '%Y-%m-%d %H:%M:%S')
 
 
-def clean_up(market_df):
+def clean_up(market_df: DataFrame) -> DataFrame:
     market_df.reset_index(inplace=True)
     market_df.drop_duplicates(subset=['index'], keep='first', inplace=True)
     market_df.reset_index(inplace=True)
 
     datetime_list = []
-    for index, row in market_df.iterrows():
+    for row in market_df.iterrows():
         datetime_list.append(get_datetime(row['index']))
     market_df.insert(1, 'datetime', datetime_list)
   
@@ -56,7 +57,7 @@ def clean_up(market_df):
     return new_df
 
 
-def plot_momentum_bounds(cur_date, momentum_data, cur_trades):
+def plot_momentum_bounds(cur_date: datetime, momentum_data: DataFrame, cur_trades: CurTrades) -> None:
     plt.figure(figsize=(12, 8))
     plt.plot(momentum_data['lower_bound'], label='lower bound')
     plt.plot(momentum_data['upper_bound'], label='upper bound')
@@ -79,13 +80,13 @@ def plot_momentum_bounds(cur_date, momentum_data, cur_trades):
     plt.close()
 
 
-def get_moves_from_open(df):
+def get_moves_from_open(df: DataFrame) -> DataFrame:
     move_df = pd.DataFrame()
     cur_open_value = 0
 
     for i, r in df.iterrows():
         cur_datetime = r['datetime']
-        if r['valid']:
+        if r['valid'].any():
             if cur_datetime.time() == time(9, 30, 0):
                 cur_open_value = r['Open']
                 temp_row = pd.DataFrame({'datetime': [cur_datetime], 'valid': [True], 'value': [0]})
@@ -108,15 +109,15 @@ def get_moves_from_open(df):
 VWAP = SUM_0-t_(average of High, Low, and Close * Volume at minute t) / SUM_0-t_(Volume)
 det_hlc simply returns the numerator to be used within get_vwap().
 """
-def get_hlc(row):
+def get_hlc(row: DataFrame) -> int:
     hlc_avg = (row['High'] + row['Low'] + row['Close']) / 3
     return hlc_avg * row['Volume']
 
 
-def get_vwap(stsd, md):
+def get_vwap(stsd: DataFrame, md: DataFrame) -> None:
     hlc_sum, volume_sum, cur_vwap, prev_vwap = 0, 0, 0, 0
     for i, r in stsd.iterrows():
-        if r['valid']:
+        if r['valid'].any():
             hlc_sum += get_hlc(r)
             volume_sum += r['Volume']
             cur_vwap = hlc_sum / volume_sum
@@ -126,7 +127,7 @@ def get_vwap(stsd, md):
         prev_vwap = cur_vwap
 
 
-def get_momentum_bounds(cur_date, date_list, time_series_data, moves_from_open):
+def get_momentum_bounds(cur_date: datetime, date_list: list[datetime], time_series_data: DataFrame, moves_from_open: DataFrame):
     momentum_data = pd.DataFrame(
         columns=['time', 'x', 'x_day_avg', 'lower_bound', 'upper_bound', 'market', 'valid', 'vwap'])
 
@@ -174,7 +175,7 @@ def get_momentum_bounds(cur_date, date_list, time_series_data, moves_from_open):
     return momentum_data
 
 
-def get_trade_results_row(cur_date, momentum_df, time_series_df, trading_results):
+def get_trade_results_row(cur_date: datetime, momentum_df: DataFrame, time_series_df: DataFrame, trading_results: DataFrame):
     cur_index = trading_results.loc[trading_results['date'] == cur_date].index
     
     volatility_coef = 1
@@ -188,11 +189,12 @@ def get_trade_results_row(cur_date, momentum_df, time_series_df, trading_results
             volatility_coef = settings.MAX_NUM_SHARES / 2
 
     trades = CurTrades(is_active=False)
+
     if not momentum_df.empty:
         for i, r in momentum_df.iterrows():
-            if r['valid']:
+            if r['valid'].any():
                 if not trades.is_active:
-                    if i % settings.MIN_STEP == 0:
+                    if i % int(settings.MIN_STEP) == 0:
                         if r['market'] > r['upper_bound']:
                             trades.add_trade(r['market'], 'long', i)
                         elif r['market'] < r['lower_bound']: 
